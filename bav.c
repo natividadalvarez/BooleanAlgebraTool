@@ -5,7 +5,7 @@
 
 Expr createExprFromInput(char* exprStr);
 
-#define MODE_EVAL 1
+#define MODE_EVAL 0
 #define MODE_SIMPLIFY 1
 
 int main(int argc, char** argv) {
