@@ -1,0 +1,4 @@
+
+bool checkIdentity() {
+  return false;
+}

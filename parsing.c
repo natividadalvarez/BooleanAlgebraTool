@@ -21,16 +21,16 @@ static void validateExpression(const char * exprStr) {
   bool parenEmpty = true;
   const char* comp = exprStr;
   while(*comp != '\0') {
-    //check if its a valid char
-    bool charIsVarOrSpace = (*comp >= 'A' && *comp <= 'Z') || *comp == ' ';
+    //check if string contains any invalid chars
+    bool charIsVarSpaceParen = (*comp >= 'A' && *comp <= 'Z') || *comp == ' ' || *comp == '(' || *comp == ')';
     bool charIsOp = false;
     for(size_t i = 0; i < sizeof(opChars)/sizeof(opChars[0]); i++) {
-      if(*comp == opChars[i] || *comp == '(' || *comp == ')') {
+      if(*comp == opChars[i] ) {
         charIsOp = true;
         break;
       }
     }
-    if(!(charIsVarOrSpace || charIsOp)) {
+    if(!(charIsVarSpaceParen || charIsOp)) {
       printf("Expression contains invalid characters.\n");
       exit(EXIT_FAILURE);
     }

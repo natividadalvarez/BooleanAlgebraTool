@@ -1,272 +1,228 @@
-// test_parseExpression.c
+// test_createExpression.c
 #include <criterion/criterion.h>
 #include <criterion/logging.h>
+#include <stdbool.h>
 #include "parsing.h"
 
 // Helper to check if an operand is a variable
-static void assert_operand_var(Operand *op, char expected) {
-    cr_assert_eq(op->type, OP_VAR, "Expected OP_VAR, got %d", op->type);
-    cr_assert_eq(op->data.var, expected, "Expected var %c, got %c", expected, op->data.var);
+static void assert_expr_var(Expression* e, char expectedName) {
+  cr_assert_eq(e->exprType, TYPE_VAR, "Expected Expression type to be TYPE_VAR");
+  cr_assert_eq(e->exprValue.var.name, expectedName, "Variable name %c does not match expected name %c", e->exprValue.var.name, expectedName);
 }
 
 // Helper to check if an operand is an expression
-static void assert_operand_expr(Operand *op, enum Actions expected_action, int expected_opCount) {
-    cr_assert_eq(op->type, OP_EXPR, "Expected OP_EXPR, got %d", op->type);
-    cr_assert_eq(op->data.expr.action, expected_action, "Expected action %d, got %d",
-                 expected_action, op->data.expr.action);
-    cr_assert_eq(op->data.expr.opCount, expected_opCount, "Expected %d operands, got %d",
-                 expected_opCount, op->data.expr.opCount);
+static void assert_expr_expr(Expression* e, Actions expectedAction, int expectedOpCount) {
+  cr_assert_lt(expectedAction, sizeof(opChars)/sizeof(opChars[0]), "Action %i is invalid", expectedAction);
+  cr_assert_eq(e->exprType, TYPE_EXPR, "Expected Expression type to be TYPE_EXPR");
+  cr_assert_eq(e->exprValue.expr.operandCount, expectedOpCount, "Operand count %i does not match expected operand count %i",
+               e->exprValue.expr.operandCount, expectedOpCount);
+  cr_assert_eq(e->exprValue.expr.action, expectedAction, "Operation %c does not match expected operation %c",
+               opChars[e->exprValue.expr.action],  opChars[expectedAction]);
 }
 
-
-Test(parseExpression, trim_function)	{
-  char* exprStr = trim("  Z ");
-  cr_assert_str_eq(exprStr, "Z", "String '  Z ' should become 'Z'");
-  free(exprStr);
-  exprStr = trim("Z   ");
-  cr_assert_str_eq(exprStr, "Z", "String 'Z   ' should become 'Z'");
-  free(exprStr);
-  exprStr = trim("   Z");
-  cr_assert_str_eq(exprStr, "Z", "String '   Z' should become 'Z'");
-  free(exprStr);
+Test(createExpression, single_variable) {
+  char exprStr[] = "A";
+  Expression expr = createExpression(exprStr);
+  cr_assert_eq(expr.parenthesized, false, "Expression should not be parenthesized");
+  assert_expr_var(&expr, 'A');
 }
 
-Test(parseExpression, single_variable) {
-    char exprStr[] = "A";
-    Expr expr = parseExpression(exprStr);
-    cr_assert_eq(expr.action, ACT_BUFF, "Single variable should have ACT_BUFF action");
-    cr_assert_eq(expr.opCount, 1, "Single variable should have one operand");
-    assert_operand_var(&expr.operands[0], 'A');
+Test(createExpression, not_expression) {
+  char exprStr[] = "~A";
+  Expression expr = createExpression(exprStr);
+  cr_assert_eq(expr.parenthesized, false, "Expression should not be parenthesized");
+  assert_expr_expr(&expr, ACT_NOT, 1);
+  assert_expr_var(expr.exprValue.expr.operands, 'A');
 }
 
-Test(parseExpression, not_expression) {
-    char exprStr[] = "!A";
-    Expr expr = parseExpression(exprStr);
-    cr_assert_eq(expr.action, ACT_NOT, "Expected NOT action");
-    cr_assert_eq(expr.opCount, 1, "NOT should have 1 operand");
-    assert_operand_var(&expr.operands[0], 'A');
+Test(createExpression, and_expression) {
+  char exprStr[] = "A*B";
+  Expression expr = createExpression(exprStr);
+  cr_assert_eq(expr.parenthesized, false, "Expression should not be parenthesized");
+  assert_expr_expr(&expr, ACT_AND, 2);
+  assert_expr_var(expr.exprValue.expr.operands, 'A');
+  assert_expr_var(expr.exprValue.expr.operands+1, 'B');
 }
 
-Test(parseExpression, and_expression) {
-    char exprStr[] = "A*B";
-    Expr expr = parseExpression(exprStr);
-    cr_assert_eq(expr.action, ACT_AND, "Expected AND action");
-    cr_assert_eq(expr.opCount, 2, "Expected 2 operands");
-
-    assert_operand_var(&expr.operands[0], 'A');
-    assert_operand_var(&expr.operands[1], 'B');
+Test(createExpression, or_with_parentheses) {
+  char exprStr[] = "(A+B)";
+  Expression expr = createExpression(exprStr);
+  cr_assert_eq(expr.parenthesized, true, "Expression should be parenthesized");
 }
 
-Test(parseExpression, or_with_parentheses) {
-	char exprStr[] = "(A+B)";
-	Expr expr = parseExpression(exprStr);
-	cr_assert_eq(expr.action, ACT_OR, "Expected OR action");
-	cr_assert(expr.parenthesized, "Expected expression to be parenthesized");
-
-	assert_operand_var(&expr.operands[0], 'A');
-	assert_operand_var(&expr.operands[1], 'B');
+Test(createExpression, no_top_level_parens) {
+  char exprStr[] = "(A*B) + (A^A)";
+  Expression expr = createExpression(exprStr);
+  cr_assert_eq(expr.exprType, TYPE_EXPR, "Expected Expression type to be ExprType");
 }
 
-Test(parseExpression, no_top_level_parens) {
-    char exprStr[] = "(A*B) + (A^A)";
-	Expr expr = parseExpression(exprStr);
-	cr_assert_eq(expr.action, ACT_OR, "Expected OR action");
+Test(createExpression, nested_expression) {
+  char exprStr[] = "~(A*B)";
+  Expression* subExpr;
+  Expression expr = createExpression(exprStr);
+  assert_expr_expr(&expr, ACT_NOT, 1);
 
-	assert_operand_expr(&expr.operands[0], ACT_AND, 2);
-	assert_operand_expr(&expr.operands[1], ACT_XOR, 2);
+  subExpr = expr.exprValue.expr.operands;
+  assert_expr_expr(subExpr, ACT_AND, 2);
+  cr_assert_eq(subExpr->parenthesized, true, "Expression should be parenthesized");
+
+  //checking (A*B) operands
+  Expression* op1 = subExpr->exprValue.expr.operands;
+  assert_expr_var(op1, 'A');
+  Expression* op2 = subExpr->exprValue.expr.operands+1;
+  assert_expr_var(op2, 'B');
 }
 
-Test(parseExpression, nested_expression) {
-		char exprStr[] = "!(A*B)";
-    Expr expr = parseExpression(exprStr);
-    cr_assert_eq(expr.action, ACT_NOT, "Expected NOT action");
-    cr_assert_eq(expr.opCount, 1, "Expected 1 operand");
+Test(createExpression, nary_or)	{
+  char exprStr[] = "A+B+C+D";
+  Expression expr = createExpression(exprStr);
+  assert_expr_expr(&expr, ACT_OR, 4);
 
-    Operand *inner = expr.operands;
-    assert_operand_expr(inner, ACT_AND, 2);
-    assert_operand_var(&inner->data.expr.operands[0], 'A');
-    assert_operand_var(&inner->data.expr.operands[1], 'B');
+  Expression* op1 = expr.exprValue.expr.operands;
+  Expression* op2 = expr.exprValue.expr.operands + 1;
+  Expression* op3 = expr.exprValue.expr.operands + 2;
+  Expression* op4 = expr.exprValue.expr.operands + 3;
+
+  assert_expr_var(op1, 'A');
+  assert_expr_var(op2, 'B');
+  assert_expr_var(op3, 'C');
+  assert_expr_var(op4, 'D');
 }
 
-Test(parseExpression, variadic_or)	{
-	char exprStr[] = "A+B+C+D";
-	Expr expr = parseExpression(exprStr);
-	cr_assert_eq(expr.action, ACT_OR, "Expected OR action");
-	cr_assert_eq(expr.opCount, 4, "Expected 4 operands");
-	assert_operand_var(&expr.operands[0], 'A');
-	assert_operand_var(&expr.operands[1], 'B');
-	assert_operand_var(&expr.operands[2], 'C');
-	assert_operand_var(&expr.operands[3], 'D');
+Test(createExpression, nary_and)	{
+  char exprStr[] = "A*B*C";
+  Expression expr = createExpression(exprStr);
+  assert_expr_expr(&expr, ACT_AND, 3);
+
+  Expression* op1 = expr.exprValue.expr.operands;
+  Expression* op2 = expr.exprValue.expr.operands + 1;
+  Expression* op3 = expr.exprValue.expr.operands + 2;
+
+  assert_expr_var(op1, 'A');
+  assert_expr_var(op2, 'B');
+  assert_expr_var(op3, 'C');
 }
 
-Test(parseExpression, variadic_and)	{
-	char exprStr[] = "A*B*C";
-	Expr expr = parseExpression(exprStr);
-	cr_assert_eq(expr.action, ACT_AND, "Expected AND action");
-	cr_assert_eq(expr.opCount, 3, "Expected 3 operands");
-	assert_operand_var(&expr.operands[0], 'A');
-	assert_operand_var(&expr.operands[1], 'B');
-	assert_operand_var(&expr.operands[2], 'C');
+//This _might_ cause issues, i'm not sure if
+//XOR can be N-ary. Though I think it can, it just becomes
+//a even,odd counter essentially
+Test(createExpression, xor_chain)	{
+  char exprStr[] = "A^B^C";
+  Expression expr = createExpression(exprStr);
+  assert_expr_expr(&expr, ACT_XOR, 3);
+
+  Expression* op1 = expr.exprValue.expr.operands;
+  Expression* op2 = expr.exprValue.expr.operands + 1;
+  Expression* op3 = expr.exprValue.expr.operands + 2;
+
+  assert_expr_var(op1, 'A');
+  assert_expr_var(op2, 'B');
+  assert_expr_var(op3, 'C');
 }
 
-Test(parseExpression, xor_chain)	{
-	char exprStr[] = "A^B^C";
-	Expr expr = parseExpression(exprStr);
-	cr_assert_eq(expr.action, ACT_XOR, "Expected XOR action");
-	cr_assert_eq(expr.opCount, 3, "Expected 3 operands for XOR chain");
-	assert_operand_var(&expr.operands[0], 'A');
-	assert_operand_var(&expr.operands[1], 'B');
-	assert_operand_var(&expr.operands[2], 'C');
+Test(createExpression, precedence_and_over_or)	{
+  char exprStr[] = "A+B*C";
+  Expression expr = createExpression(exprStr);
+  assert_expr_expr(&expr, ACT_OR, 2);
+
+  Expression* op1 = expr.exprValue.expr.operands;
+  assert_expr_var(op1, 'A');
+
+  Expression* op2 = expr.exprValue.expr.operands + 1;
+  cr_assert_eq(expr.parenthesized, false, "Expression should not be parenthesized");
+  assert_expr_expr(op2, ACT_AND, 2);
 }
 
-Test(parseExpression, precedence_and_over_or)	{
-	char exprStr[] = "A+B*C";
-	Expr expr = parseExpression(exprStr);
-	cr_assert_eq(expr.action, ACT_OR, "Top should be OR");
-	cr_assert_eq(expr.opCount, 2, "OR should have 2 operands");
-	assert_operand_var(&expr.operands[0], 'A');
-	assert_operand_expr(&expr.operands[1], ACT_AND, 2);
+Test(createExpression, precedence_or_vs_and_left)	{
+  char exprStr[] = "A*B+C";
+  Expression expr = createExpression(exprStr);
 }
 
-Test(parseExpression, precedence_or_vs_and_left)	{
-	char exprStr[] = "A*B+C";
-	Expr expr = parseExpression(exprStr);
-	cr_assert_eq(expr.action, ACT_OR, "Top should be OR");
-	cr_assert_eq(expr.opCount, 2, "OR should have 2 operands");
-	assert_operand_expr(&expr.operands[0], ACT_AND, 2);
-	assert_operand_var(&expr.operands[1], 'C');
+Test(createExpression, precedence_xor_lowest_left_group)	{
+  char exprStr[] = "A+B^C";
+  Expression expr = createExpression(exprStr);
 }
 
-Test(parseExpression, precedence_xor_lowest_left_group)	{
-	char exprStr[] = "A+B^C";
-	Expr expr = parseExpression(exprStr);
-	cr_assert_eq(expr.action, ACT_OR, "Top should be OR when XOR has higher precedence");
-	cr_assert_eq(expr.opCount, 2, "OR should have 2 operands");
-	assert_operand_var(&expr.operands[0], 'A');
-	assert_operand_expr(&expr.operands[1], ACT_XOR, 2);
+Test(createExpression, precedence_xor_lowest_right_group)	{
+  char exprStr[] = "A^B+C";
+  Expression expr = createExpression(exprStr);
 }
 
-Test(parseExpression, precedence_xor_lowest_right_group)	{
-	char exprStr[] = "A^B+C";
-	Expr expr = parseExpression(exprStr);
-	cr_assert_eq(expr.action, ACT_OR, "Top should be OR when XOR has higher precedence");
-	cr_assert_eq(expr.opCount, 2, "OR should have 2 operands");
-	assert_operand_expr(&expr.operands[0], ACT_XOR, 2);
-	assert_operand_var(&expr.operands[1], 'C');
+Test(createExpression, mixed_or_and_sequence)	{
+  char exprStr[] = "A+B*C+D";
+  Expression expr = createExpression(exprStr);
 }
 
-Test(parseExpression, mixed_or_and_sequence)	{
-	char exprStr[] = "A+B*C+D";
-	Expr expr = parseExpression(exprStr);
-	cr_assert_eq(expr.action, ACT_OR, "Top should be OR");
-	cr_assert_eq(expr.opCount, 3, "Expected 3 operands for OR");
-	assert_operand_var(&expr.operands[0], 'A');
-	assert_operand_expr(&expr.operands[1], ACT_AND, 2);
-	assert_operand_var(&expr.operands[2], 'D');
+Test(createExpression, spaces_handling)	{
+  char exprStr[] = "  A   +   B*C  ";
+  Expression expr = createExpression(exprStr);
 }
 
-Test(parseExpression, spaces_handling)	{
-	char exprStr[] = "  A   +   B*C  ";
-	Expr expr = parseExpression(exprStr);
-	cr_assert_eq(expr.action, ACT_OR, "Top should be OR");
-	cr_assert_eq(expr.opCount, 2, "OR should have 2 operands");
-	assert_operand_var(&expr.operands[0], 'A');
-	assert_operand_expr(&expr.operands[1], ACT_AND, 2);
+Test(createExpression, parentheses_without_not)	{
+  char exprStr[] = "(A+B)*C";
+  Expression expr = createExpression(exprStr);
 }
 
-Test(parseExpression, parentheses_without_not)	{
-	char exprStr[] = "(A+B)*C";
-	Expr expr = parseExpression(exprStr);
-	cr_assert_eq(expr.action, ACT_AND, "Top should be AND");
-	cr_assert_eq(expr.opCount, 2, "AND should have 2 operands");
-	assert_operand_expr(&expr.operands[0], ACT_OR, 2);
-	assert_operand_var(&expr.operands[1], 'C');
+Test(createExpression, xor_over_or_both_sides)	{
+  char exprStr[] = "A^B+C^D";
+  Expression expr = createExpression(exprStr);
 }
 
-Test(parseExpression, xor_over_or_both_sides)	{
-	char exprStr[] = "A^B+C^D";
-	Expr expr = parseExpression(exprStr);
-	cr_assert_eq(expr.action, ACT_OR, "Top should be OR when XOR has higher precedence");
-	cr_assert_eq(expr.opCount, 2, "OR should have 2 operands");
-	assert_operand_expr(&expr.operands[0], ACT_XOR, 2);
-	assert_operand_expr(&expr.operands[1], ACT_XOR, 2);
+Test(createExpression, xor_chain_on_right_of_or)	{
+  char exprStr[] = "A+B^C^D";
+  Expression expr = createExpression(exprStr);
 }
 
-Test(parseExpression, xor_chain_on_right_of_or)	{
-	char exprStr[] = "A+B^C^D";
-	Expr expr = parseExpression(exprStr);
-	cr_assert_eq(expr.action, ACT_OR, "Top should be OR");
-	cr_assert_eq(expr.opCount, 2, "OR should have 2 operands");
-	assert_operand_var(&expr.operands[0], 'A');
-	assert_operand_expr(&expr.operands[1], ACT_XOR, 3);
+Test(createExpression, xor_left_then_two_ors)	{
+  char exprStr[] = "A^B+C+D";
+  Expression expr = createExpression(exprStr);
 }
 
-Test(parseExpression, xor_left_then_two_ors)	{
-	char exprStr[] = "A^B+C+D";
-	Expr expr = parseExpression(exprStr);
-	cr_assert_eq(expr.action, ACT_OR, "Top should be OR");
-	cr_assert_eq(expr.opCount, 3, "OR should have 3 operands when variadic");
-	assert_operand_expr(&expr.operands[0], ACT_XOR, 2);
-	assert_operand_var(&expr.operands[1], 'C');
-	assert_operand_var(&expr.operands[2], 'D');
+Test(createExpression, parentheses_force_or_then_and)	{
+  char exprStr[] = "(A+B)*C";
+  Expression expr = createExpression(exprStr);
 }
 
-Test(parseExpression, parentheses_force_or_then_and)	{
-	char exprStr[] = "(A+B)*C";
-	Expr expr = parseExpression(exprStr);
-	cr_assert_eq(expr.action, ACT_AND, "Top should be AND");
-	cr_assert_eq(expr.opCount, 2, "AND should have 2 operands");
-	assert_operand_expr(&expr.operands[0], ACT_OR, 2);
-	assert_operand_var(&expr.operands[1], 'C');
+Test(createExpression, parentheses_with_xor_and_or)	{
+  char exprStr[] = "(A^B)+C";
+  Expression expr = createExpression(exprStr);
 }
 
-Test(parseExpression, parentheses_with_xor_and_or)	{
-	char exprStr[] = "(A^B)+C";
-	Expr expr = parseExpression(exprStr);
-	cr_assert_eq(expr.action, ACT_OR, "Top should be OR");
-	cr_assert_eq(expr.opCount, 2, "OR should have 2 operands");
-	assert_operand_expr(&expr.operands[0], ACT_XOR, 2);
-	assert_operand_var(&expr.operands[1], 'C');
+Test(createExpression, and_groups_around_xor)	{
+  char exprStr[] = "A*B^C*D";
+  Expression expr = createExpression(exprStr);
 }
 
-Test(parseExpression, and_groups_around_xor)	{
-	char exprStr[] = "A*B^C*D";
-	Expr expr = parseExpression(exprStr);
-	cr_assert_eq(expr.action, ACT_XOR, "Top should be XOR (AND higher than XOR)");
-	cr_assert_eq(expr.opCount, 2, "XOR should have 2 operands");
-	assert_operand_expr(&expr.operands[0], ACT_AND, 2);
-	assert_operand_expr(&expr.operands[1], ACT_AND, 2);
+Test(createExpression, spaces_and_parentheses_mixed)	{
+  char exprStr[] = " ( A + B ) * ( C ^ D ) ";
+  Expression expr = createExpression(exprStr);
 }
 
-Test(parseExpression, spaces_and_parentheses_mixed)	{
-	char exprStr[] = " ( A + B ) * ( C ^ D ) ";
-	Expr expr = parseExpression(exprStr);
-	cr_assert_eq(expr.action, ACT_AND, "Top should be AND");
-	cr_assert_eq(expr.opCount, 2, "AND should have 2 operands");
-	assert_operand_expr(&expr.operands[0], ACT_OR, 2);
-	assert_operand_expr(&expr.operands[1], ACT_XOR, 2);
+Test(createExpression, single_variable_with_spaces)	{
+  char* exprStr = "   Z   ";
+  Expression expr = createExpression(exprStr);
+  assert_expr_var(&expr, 'Z');
 }
 
-Test(parseExpression, single_variable_with_spaces)	{
-	char* exprStr = "   Z   ";
-  exprStr = trim(exprStr);
-	Expr expr = parseExpression(exprStr);
-	cr_assert_eq(expr.action, ACT_BUFF, "Single variable should have ACT_BUFF action");
-	cr_assert_eq(expr.opCount, 1, "Single variable should have one operand");
-	assert_operand_var(&expr.operands[0], 'Z');
-  free(exprStr);
-}
+Test(createExpression, long_nary_or)	{
+  char exprStr[] = "A+B+C+D+E+F+G";
+  Expression expr = createExpression(exprStr);
 
-Test(parseExpression, long_variadic_or)	{
-	char exprStr[] = "A+B+C+D+E+F+G";
-	Expr expr = parseExpression(exprStr);
-	cr_assert_eq(expr.action, ACT_OR, "Expected OR action");
-	cr_assert_eq(expr.opCount, 7, "Expected 7 operands");
-	assert_operand_var(&expr.operands[0], 'A');
-	assert_operand_var(&expr.operands[1], 'B');
-	assert_operand_var(&expr.operands[2], 'C');
-	assert_operand_var(&expr.operands[3], 'D');
-	assert_operand_var(&expr.operands[4], 'E');
-	assert_operand_var(&expr.operands[5], 'F');
-	assert_operand_var(&expr.operands[6], 'G');
+  assert_expr_expr(&expr, ACT_OR, 7);
+
+  Expression* op1 = expr.exprValue.expr.operands;
+  Expression* op2 = expr.exprValue.expr.operands + 1;
+  Expression* op3 = expr.exprValue.expr.operands + 2;
+  Expression* op4 = expr.exprValue.expr.operands + 3;
+  Expression* op5 = expr.exprValue.expr.operands + 4;
+  Expression* op6 = expr.exprValue.expr.operands + 5;
+  Expression* op7 = expr.exprValue.expr.operands + 6;
+
+  assert_expr_var(op1, 'A');
+  assert_expr_var(op2, 'B');
+  assert_expr_var(op3, 'C');
+  assert_expr_var(op4, 'D');
+  assert_expr_var(op5, 'E');
+  assert_expr_var(op6, 'F');
+  assert_expr_var(op7, 'G');
 }

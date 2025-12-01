@@ -41,6 +41,8 @@ struct Expression {
   bool parenthesized;
 };
 
+extern char opChars[5];
+
 Expression createExpression(const char* exprStr);
 void printExpression(Expression* expression);
 void cleanup(Expression* e);
