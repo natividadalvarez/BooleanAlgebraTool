@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include "parsing.h"
 
-Expr createExprFromInput(char* exprStr);
+void createExprFromInput(char* exprStr);
 
 #define MODE_EVAL 0
 #define MODE_SIMPLIFY 1
@@ -32,22 +32,12 @@ int main(int argc, char** argv) {
     printf("Usage: bav \"expression\" -[e,s] \n -e: Evaluate the expression \n -s: simplify the expression\n");
     return 0;
   }
-
-  Expr expression = createExprFromInput(exprStr);
-  printf("Expression produced: ");
-  printExpr(&expression);
+  //parse into AST
+  printf("Given expression is: %s\n", exprStr);
+  Expression expr =  createExpression(exprStr);
+  printf("The expression is: ");
+  printExpression(&expr);
+  cleanup(&expr);
   printf("\n");
-
-
   return 0;
 }
-
-Expr createExprFromInput(char* exprStr) {
-  exprStr = trim(exprStr);
-  validateExpression(exprStr);
-  printf("Expression given: %s\n", exprStr);
-  Expr e = parseExpression(exprStr);
-  free(exprStr);
-  return e;
-}
-

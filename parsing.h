@@ -1,46 +1,46 @@
-typedef struct Expr Expr;
-typedef struct Operand Operand;
+typedef struct Expression Expression;
 
-enum Actions {
+typedef enum {
   ACT_OR = 0,
   ACT_XOR = 1,
   ACT_AND = 2,
   ACT_NOT = 3,
-  ACT_PAREN = 4,
-  ACT_BUFF = 5,
-  ACT_INVALID = 6
-};
+  ACT_INVALID = 4
+} Actions;
 
 typedef enum {
-  OP_EXPR,
-  OP_VAR
-} OperandType;
+  FALSE = 0,
+  TRUE = 1,
+  UNDEF = 2
+} Value;
 
-struct Expr {
-  enum Actions action;
-  Operand* operands;
-  int opCount;
-  bool parenthesized;
-};
+typedef struct {
+  Actions action;
+  Expression* operands;
+  int operandCount;
+} Expr;
+
+typedef struct {
+  char name;
+  Value value;
+} Variable;
 
 typedef union {
   Expr expr;
-  char var;
-} OperandValue;
+  Variable var;
+} ExprValue;
 
+typedef enum {
+  TYPE_EXPR,
+  TYPE_VAR
+} ExprType;
 
-struct Operand {
-  OperandValue data;
-  OperandType type;
+struct Expression {
+  ExprType exprType;
+  ExprValue exprValue;
+  bool parenthesized;
 };
 
-extern char opChars[];
-
-char* trim(const char* exprStr);
-void validateExpression(const char * exprStr);
-void printExpr(Expr* expression);
-//parseExpression potentially modifies exprStr,
-//parseOperand may call parseExpression, so it may also modify
-//exprStr, therefore, neither can use a const char*
-Expr parseExpression(char* exprStr);
-Operand parseOperand(char* opStr);
+Expression createExpression(const char* exprStr);
+void printExpression(Expression* expression);
+void cleanup(Expression* e);
