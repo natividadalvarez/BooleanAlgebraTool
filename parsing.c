@@ -34,86 +34,77 @@ static void validateExpression(const char * exprStr) {
       printf("Expression contains invalid characters.\n");
       exit(EXIT_FAILURE);
     }
-    //parenthesis checking
+
+    //parenthesis parity checking
     if(*comp == '(') {
       parenEmpty = true;
       parenCount++;
     }
     else if(*comp == ')') {
       if(parenEmpty) {
-        printf("%s is invalid: contains empty ()\n", exprStr);
+        printf("Expression is invalid: contains empty ()\n");
         exit(EXIT_FAILURE);
       }
       parenCount--;
-    } else if(*comp != ' ' && *comp != '\t') {
+    } else if(*comp != ' ' && *comp != '\t' && *comp != '\n') { //may need to add more
       parenEmpty = false;
     }
     comp++;
   }
-  if(parenCount > 0)
-      printf("%s is invalid: has extra (\n", exprStr);
-  if(parenCount < 0)
-      printf("%s is invalid: has extra )\n", exprStr);
 
-  if(parenCount !=0)
-      exit(EXIT_FAILURE);
+  if(parenCount !=0) {
+		static const char whichone[2] = {'(', ')'};
+		printf("Expression is invalid: has extra %c \n", whichone[parenCount < 0]);
+		exit(EXIT_FAILURE);
+	}
+}
+
+//Removes all whitespace from ends of string. Modifies exprStr in place
+static void trim(char** exprStr) {
+  while(*(*exprStr) == ' ' || *(*exprStr) == '\t') (*exprStr)++;
+  size_t exprLen = strlen(*exprStr);
+
+  bool spaceFound = false;
+  size_t firstNonSpace = exprLen - 1;
+  const char* s = *exprStr;
+
+  for(; firstNonSpace > 0; firstNonSpace--) {
+    if(s[firstNonSpace] != ' ' && s[firstNonSpace] != '\t'){
+      break;
+    }
+    spaceFound = true;
+  }
+
+  if(spaceFound) {
+    (*exprStr)[firstNonSpace + 1] = '\0';
+  }
 }
 
 //Assumes given validated expression
 static bool topLevelParen(const char* exprStr, size_t exprLen) {
-  if(exprStr[exprLen-1] != ')') return false;
+  if(exprStr[0] != '(' || exprStr[exprLen - 1] != ')') return false;
   int parenCount = 1;
-  for(int i = exprLen - 2; i > 0; i--) {
+  for(size_t i = 1; i < exprLen; i++) {
     if(parenCount == 0) return false; //we found its pair before the end, so it's not top level
-    if(exprStr[i] == ')') parenCount++;
-    if(exprStr[i] == '(') parenCount--;
+    if(exprStr[i] == ')') parenCount--;
+    if(exprStr[i] == '(') parenCount++;
   }
-  return parenCount == 1 && exprStr[0] == '(';
+  return parenCount == 0;
 }
 
-//Removes all whitespace from ends of string
-//Creates new string
-static char* trim(const char* exprStr) {
-  while(*exprStr == ' ' || *exprStr == '\t') exprStr++;
-  size_t exprLen = strlen(exprStr);
-  bool spaceFound = false;
-  size_t firstSpace;
-  const char* s = exprStr;
-  size_t i = exprLen - 1;
-  while(*s != '\0') {
-    if(exprStr[i] != ' ' && exprStr[i] != '\t') break;
-    firstSpace = i--;
-    spaceFound = true;
-    s++;
-  }
-  exprLen = spaceFound? firstSpace + 1: exprLen + 1;
-  //return new string
-  char* trimmed = malloc(sizeof(char) * exprLen+1);
-  for(size_t i = 0; i <= exprLen - 1; i++) {
-    trimmed[i] = exprStr[i];
-  }
-  trimmed[exprLen - 1] = '\0';
-  return trimmed;
-}
-
-//Strips all top level parenthesis from expression
-//Creates new string, frees old one
-static char* stripParenthesis(Expression* e, char** exprStr, size_t* exprLen) {
-  char* data = *exprStr;
-  if(topLevelParen(data, *exprLen)) {
+//Strips all top level parenthesis from expression. Modifies exprStr in place
+//assumes parentheis is already validated by validateExpression
+static void stripParenthesis(Expression* e, char** exprStr, size_t* exprLen) {
+  if(topLevelParen(*exprStr, *exprLen)) {
     e->parenthesized = true;
-    char letter = (*exprStr)[0];
-    while(letter == '('){
-      data+=1;
+    char letter = *(*exprStr);
+    while(letter == '(' && *((*exprStr)+*exprLen-1) == ')'){
+      (*exprStr)++;
       (*exprLen)-=2;
-      data[*exprLen] = '\0';
-      letter = data[0];
+      (*exprStr)[*exprLen] = '\0';
+      letter = (*exprStr)[0];
     }
   }
-  char* stripped = malloc(sizeof(char) * (*exprLen + 1));
-  strncpy(stripped, data, *exprLen);
-  stripped[*exprLen] = '\0';
-  return stripped;
 }
 
 Actions lowestPrecedenceOp(char* exprStr, size_t exprLen) {
@@ -140,7 +131,7 @@ Actions lowestPrecedenceOp(char* exprStr, size_t exprLen) {
     }
   }
   if(op == ACT_INVALID) {
-    printf("Expression %s is invalid\n", exprStr);
+    printf("Expression is invalid: Invalid operator\n" );
     exit(EXIT_FAILURE);
   }
   return op;
@@ -155,7 +146,7 @@ void parseNaryOp(Expression* e, char* exprStr, size_t exprLen, Actions op) {
   for(size_t i = 0; i <= exprLen; i++) {
     if(exprStr[i] == '(') parenCount++;
     else if(exprStr[i] == ')') parenCount--;
-    if(parenCount > 0) continue;
+    if(parenCount != 0) continue;
 
     if(exprStr[i] == opChars[op]) {
       exprVal->operandCount++;
@@ -178,29 +169,24 @@ void parseNaryOp(Expression* e, char* exprStr, size_t exprLen, Actions op) {
   for(size_t i = 0; i <= exprLen; i++) {
     char c = exprStr[i];
     //skip everything in parenthesis, they have a higher precedence
-    if(parenCount != 0  && c != ')') continue;
-    else if(c == ')'){
-      parenCount--;
-      continue;
-    }
-    if(c == '(') {
-      parenCount++;
-    } else if(c == opChars[op]) {
+    if(c == '(') parenCount++;
+    else if(c == ')') parenCount--;
+    if(parenCount != 0) continue;
+
+    if(c == opChars[op] && parenCount == 0) {
       size_t len = i - readOperandFrom;
-      char* str = malloc(sizeof(char) * len+1);
-      strncpy(str, exprStr+readOperandFrom, len);
+      char* str = exprStr;
+      str+=readOperandFrom;
       str[len] = '\0';
       exprVal->operands[operandIdx++] = createExpression(str);
-      free(str);
       readOperandFrom = i+1;
     }
   }
   size_t len = exprLen - readOperandFrom;
-  char* str = malloc(sizeof(char) * len+1);
-  strncpy(str, exprStr+readOperandFrom, len);
+  char* str = exprStr;
+  str+=readOperandFrom;
   str[len] = '\0';
   exprVal->operands[operandIdx++] = createExpression(str);
-  free(str);
 }
 
 //There's really only one unary operation, negation
@@ -218,53 +204,49 @@ void parseUnaryOp(Expression* e, char* exprStr, size_t exprLen, Actions op) {
   exprVal->operands = malloc(sizeof(Expression));
 
   size_t len = exprLen - 1;
-  char* str = malloc(sizeof(char) * len+1);
-  strncpy(str, exprStr+1, len);
+  char* str = exprStr+1;
   str[len] = '\0';
   exprVal->operands[0] = createExpression(str);
-  free(str);
 }
 
-//recursively parses sub-expressions until atomic unit (variable or constant) is found
-//AST will be N-ary tree of operator with its operand
-Expression createExpression(const char* exprStr) {
+//Recursively parses sub-expressions until atomic unit (variable or constant) is found.
+//AST will be N-ary tree of operator with its operand. Will modify exprStr in place,
+//so make sure you give it a string that can be modified (i.e. stack/heap allocated)
+Expression createExpression(char* exprStr) {
   static int recursion_guard = 0;
   recursion_guard++;
   if(recursion_guard > 10000) {
     printf("You have a recursion problem\n");
     exit(EXIT_FAILURE);
   }
-  char* trimmedExpr = trim(exprStr);
-  validateExpression(trimmedExpr);
+  trim(&exprStr);
+  validateExpression(exprStr);
 
   Expression e = {
     .parenthesized = false
   };
-  size_t exprLen = strlen(trimmedExpr);
-
-  char* strippedExpr = stripParenthesis(&e, &trimmedExpr, &exprLen);
-  free(trimmedExpr);
+  size_t exprLen = strlen(exprStr);
+  stripParenthesis(&e, &exprStr, &exprLen);
 
   if(exprLen == 1) { //this should be a var
     e.exprType = TYPE_VAR;
     e.exprValue.var = (Variable){
-      .name = strippedExpr[0],
+      .name = exprStr[0],
       .value = UNDEF
     };
   } else {
     e.exprType = TYPE_EXPR;
     //find the lowest precedence operator
-    Actions op = lowestPrecedenceOp(strippedExpr, exprLen);
+    Actions op = lowestPrecedenceOp(exprStr, exprLen);
     e.exprValue.expr = (Expr){
       .action = op
     };
     if(op != ACT_NOT) {
-      parseNaryOp(&e, strippedExpr, exprLen, op);
+      parseNaryOp(&e, exprStr, exprLen, op);
     } else {
-      parseUnaryOp(&e, strippedExpr, exprLen, op);
+      parseUnaryOp(&e, exprStr, exprLen, op);
     }
   }
-  free(strippedExpr);
   return e;
 }
 
@@ -275,7 +257,7 @@ void printExpression(Expression* expression) {
   } else {
     Expr* expr = &expression->exprValue.expr;
     if(expr->operandCount > 1) {
-      for(int i = 0; i < expr->operandCount; i++) {
+      for(unsigned int i = 0; i < expr->operandCount; i++) {
         Expression* e = expr->operands + i;
         printExpression(e);
         if(i < expr->operandCount - 1)
@@ -293,7 +275,7 @@ void cleanup(Expression* e) {
   if(e->exprType == TYPE_VAR) {
     return;
   } else {
-    for(int i = 0; i < e->exprValue.expr.operandCount; i++) {
+    for(unsigned int i = 0; i < e->exprValue.expr.operandCount; i++) {
       cleanup(e->exprValue.expr.operands+i);
     }
   }

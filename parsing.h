@@ -1,3 +1,6 @@
+#pragma once
+#include <stdbool.h>
+
 typedef struct Expression Expression;
 
 typedef enum {
@@ -17,7 +20,7 @@ typedef enum {
 typedef struct {
   Actions action;
   Expression* operands;
-  int operandCount;
+  unsigned int operandCount;
 } Expr;
 
 typedef struct {
@@ -43,6 +46,6 @@ struct Expression {
 
 extern char opChars[5];
 
-Expression createExpression(const char* exprStr);
+Expression createExpression(char* exprStr);
 void printExpression(Expression* expression);
 void cleanup(Expression* e);
