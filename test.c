@@ -1,8 +1,9 @@
-// test_createExpression.c
 #include <criterion/criterion.h>
 #include <criterion/logging.h>
 #include <stdbool.h>
 #include "parsing.h"
+#include "algebra.h"
+#include <stdio.h>
 
 // Helper to check if an operand is a variable
 static void assert_expr_var(Expression* e, char expectedName) {
@@ -21,10 +22,21 @@ static void assert_expr_expr(Expression* e, Actions expectedAction, int expected
 }
 
 Test(createExpression, single_variable) {
+	/*** Testing expression creation ***/
   char exprStr[] = "A";
   Expression expr = createExpression(exprStr);
   cr_assert_eq(expr.parenthesized, false, "Expression should not be parenthesized");
   assert_expr_var(&expr, 'A');
+
+	/*** Testing Eval ***/
+	bool valueMap[26] = {0};
+	//when false
+	bool result = eval(&expr, valueMap);
+	cr_assert_eq(result, false, "False is not true.");
+	//when true
+	valueMap[0] = 1;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, true, "True is not false.");
 }
 
 Test(createExpression, not_expression) {
@@ -33,6 +45,14 @@ Test(createExpression, not_expression) {
   cr_assert_eq(expr.parenthesized, false, "Expression should not be parenthesized");
   assert_expr_expr(&expr, ACT_NOT, 1);
   assert_expr_var(expr.exprValue.expr.operands, 'A');
+
+	/*** Testing Eval ***/
+	bool valueMap[26] = {0};
+	bool result = eval(&expr, valueMap);
+	cr_assert_eq(result, true);
+	valueMap[0] = 1;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
 }
 
 Test(createExpression, and_expression) {
@@ -42,18 +62,78 @@ Test(createExpression, and_expression) {
   assert_expr_expr(&expr, ACT_AND, 2);
   assert_expr_var(expr.exprValue.expr.operands, 'A');
   assert_expr_var(expr.exprValue.expr.operands+1, 'B');
+
+	/*** Testing Eval ***/
+	bool valueMap[26] = {0,0};
+	bool result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
+
+	valueMap[0] = 1;
+	valueMap[1] = 0;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
+
+	valueMap[0] = 0;
+	valueMap[1] = 1;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
+
+	valueMap[0] = 1;
+	valueMap[1] = 1;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, true);
 }
 
 Test(createExpression, or_with_parentheses) {
   char exprStr[] = "(A+B)";
   Expression expr = createExpression(exprStr);
   cr_assert_eq(expr.parenthesized, true, "Expression should be parenthesized");
+
+	/*** Testing Eval ***/
+	bool valueMap[26] = {0,0};
+	bool result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
+
+	valueMap[0] = 1;
+	valueMap[1] = 0;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, true);
+
+	valueMap[0] = 0;
+	valueMap[1] = 1;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, true);
+
+	valueMap[0] = 1;
+	valueMap[1] = 1;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, true);
 }
 
 Test(createExpression, no_top_level_parens) {
   char exprStr[] = "(A*B) + (A^A)";
   Expression expr = createExpression(exprStr);
   cr_assert_eq(expr.exprType, TYPE_EXPR, "Expected Expression type to be ExprType");
+
+	/*** Testing Eval ***/
+	bool valueMap[26] = {0,0};
+	bool result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
+
+	valueMap[0] = 1;
+	valueMap[1] = 0;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
+
+	valueMap[0] = 0;
+	valueMap[1] = 1;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
+
+	valueMap[0] = 1;
+	valueMap[1] = 1;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, true);
 }
 
 Test(createExpression, nested_expression) {
@@ -71,6 +151,26 @@ Test(createExpression, nested_expression) {
   assert_expr_var(op1, 'A');
   Expression* op2 = subExpr->exprValue.expr.operands+1;
   assert_expr_var(op2, 'B');
+
+	/*** Testing Eval ***/
+	bool valueMap[26] = {0,0};
+	bool result = eval(&expr, valueMap);
+	cr_assert_eq(result, true);
+
+	valueMap[0] = 1;
+	valueMap[1] = 0;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, true);
+
+	valueMap[0] = 0;
+	valueMap[1] = 1;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, true);
+
+	valueMap[0] = 1;
+	valueMap[1] = 1;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
 }
 
 Test(createExpression, nary_or)	{
@@ -87,6 +187,39 @@ Test(createExpression, nary_or)	{
   assert_expr_var(op2, 'B');
   assert_expr_var(op3, 'C');
   assert_expr_var(op4, 'D');
+
+	/*** Testing Eval ***/
+	bool valueMap[26] = {0,0,0,0};
+	bool result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
+
+	valueMap[0] = 1;
+	valueMap[1] = 0;
+	valueMap[2] = 0;
+	valueMap[3] = 0;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, true);
+
+	valueMap[0] = 0;
+	valueMap[1] = 1;
+	valueMap[2] = 0;
+	valueMap[3] = 0;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, true);
+
+	valueMap[0] = 0;
+	valueMap[1] = 0;
+	valueMap[2] = 1;
+	valueMap[3] = 0;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, true);
+
+	valueMap[0] = 0;
+	valueMap[1] = 0;
+	valueMap[2] = 0;
+	valueMap[3] = 1;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, true);
 }
 
 Test(createExpression, nary_and)	{
@@ -101,6 +234,35 @@ Test(createExpression, nary_and)	{
   assert_expr_var(op1, 'A');
   assert_expr_var(op2, 'B');
   assert_expr_var(op3, 'C');
+
+	/*** Testing Eval ***/
+	bool valueMap[26] = {0,0,0};
+	bool result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
+
+	valueMap[0] = 1;
+	valueMap[1] = 0;
+	valueMap[2] = 0;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
+
+	valueMap[0] = 1;
+	valueMap[1] = 0;
+	valueMap[2] = 0;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
+
+	valueMap[0] = 1;
+	valueMap[1] = 0;
+	valueMap[2] = 1;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
+
+	valueMap[0] = 1;
+	valueMap[1] = 1;
+	valueMap[2] = 1;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, true);
 }
 
 //This _might_ cause issues, i'm not sure if
@@ -118,6 +280,36 @@ Test(createExpression, xor_chain)	{
   assert_expr_var(op1, 'A');
   assert_expr_var(op2, 'B');
   assert_expr_var(op3, 'C');
+
+
+	/*** Testing Eval ***/
+	bool valueMap[26] = {0,0,0};
+	bool result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
+
+	valueMap[0] = 1;
+	valueMap[1] = 0;
+	valueMap[2] = 0;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, true);
+
+	valueMap[0] = 1;
+	valueMap[1] = 1;
+	valueMap[2] = 0;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
+
+	valueMap[0] = 1;
+	valueMap[1] = 0;
+	valueMap[2] = 1;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
+
+	valueMap[0] = 1;
+	valueMap[1] = 1;
+	valueMap[2] = 1;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, true);
 }
 
 Test(createExpression, precedence_and_over_or)	{
@@ -131,26 +323,147 @@ Test(createExpression, precedence_and_over_or)	{
   Expression* op2 = expr.exprValue.expr.operands + 1;
   cr_assert_eq(expr.parenthesized, false, "Expression should not be parenthesized");
   assert_expr_expr(op2, ACT_AND, 2);
+
+  Expression* op3 = op2->exprValue.expr.operands;
+  assert_expr_var(op3, 'B');
+  Expression* op4 = op2->exprValue.expr.operands + 1;
+  assert_expr_var(op4, 'C');
+
+	/*** Testing Eval ***/
+	bool valueMap[26] = {0,0,0};
+	bool result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
+
+	valueMap[0] = 1;
+	valueMap[1] = 0;
+	valueMap[2] = 0;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, true);
+
+	valueMap[0] = 0;
+	valueMap[1] = 1;
+	valueMap[2] = 0;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
+
+	valueMap[0] = 0;
+	valueMap[1] = 0;
+	valueMap[2] = 1;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
+
+	valueMap[0] = 0;
+	valueMap[1] = 1;
+	valueMap[2] = 1;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, true);
 }
 
 Test(createExpression, precedence_or_vs_and_left)	{
   char exprStr[] = "A*B+C";
   Expression expr = createExpression(exprStr);
+  assert_expr_expr(&expr, ACT_OR, 2);
+
+  Expression* op1 = expr.exprValue.expr.operands;
+  cr_assert_eq(expr.parenthesized, false, "Expression should not be parenthesized");
+  assert_expr_expr(op1, ACT_AND, 2);
+
+  Expression* op3 = op1->exprValue.expr.operands;
+  assert_expr_var(op3, 'A');
+  Expression* op4 = op1->exprValue.expr.operands + 1;
+  assert_expr_var(op4, 'B');
+
+  Expression* op2 = expr.exprValue.expr.operands + 1;
+  assert_expr_var(op2, 'C');
+
+
+	/*** Testing Eval ***/
+	bool valueMap[26] = {0,0,0};
+	bool result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
+
+	valueMap[0] = 0;
+	valueMap[1] = 0;
+	valueMap[2] = 1;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, true);
+
+	valueMap[0] = 0;
+	valueMap[1] = 1;
+	valueMap[2] = 0;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
+
+	valueMap[0] = 1;
+	valueMap[1] = 0;
+	valueMap[2] = 0;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
+
+	valueMap[0] = 1;
+	valueMap[1] = 1;
+	valueMap[2] = 0;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, true);
 }
 
 Test(createExpression, precedence_xor_lowest_left_group)	{
   char exprStr[] = "A+B^C";
   Expression expr = createExpression(exprStr);
+
+  assert_expr_expr(&expr, ACT_OR, 2);
+
+  Expression* op1 = expr.exprValue.expr.operands;
+  assert_expr_var(op1, 'A');
+
+  Expression* op2 = expr.exprValue.expr.operands + 1;
+  cr_assert_eq(expr.parenthesized, false, "Expression should not be parenthesized");
+  assert_expr_expr(op2, ACT_XOR, 2);
+
+  Expression* op3 = op2->exprValue.expr.operands;
+  assert_expr_var(op3, 'B');
+  Expression* op4 = op2->exprValue.expr.operands + 1;
+  assert_expr_var(op4, 'C');
 }
 
 Test(createExpression, precedence_xor_lowest_right_group)	{
   char exprStr[] = "A^B+C";
   Expression expr = createExpression(exprStr);
+  assert_expr_expr(&expr, ACT_OR, 2);
+
+  Expression* op1 = expr.exprValue.expr.operands;
+  cr_assert_eq(expr.parenthesized, false, "Expression should not be parenthesized");
+  assert_expr_expr(op1, ACT_XOR, 2);
+
+  Expression* op3 = op1->exprValue.expr.operands;
+  assert_expr_var(op3, 'A');
+  Expression* op4 = op1->exprValue.expr.operands + 1;
+  assert_expr_var(op4, 'B');
+
+  Expression* op2 = expr.exprValue.expr.operands + 1;
+  assert_expr_var(op2, 'C');
 }
 
 Test(createExpression, mixed_or_and_sequence)	{
   char exprStr[] = "A+B*C+D";
   Expression expr = createExpression(exprStr);
+  cr_assert_eq(expr.parenthesized, false, "Expression should not be parenthesized");
+  assert_expr_expr(&expr, ACT_OR, 3);
+
+  Expression* op1 = expr.exprValue.expr.operands;
+  assert_expr_var(op1, 'A');
+
+  Expression* op2 = expr.exprValue.expr.operands+1;
+  assert_expr_expr(op2, ACT_AND, 2);
+  Expression* op4 = op2->exprValue.expr.operands;
+  assert_expr_var(op4, 'B');
+  Expression* op5 = op2->exprValue.expr.operands+1;
+  assert_expr_var(op5, 'C');
+
+  /* assert_expr_var(op2, 'A'); */
+  Expression* op3 = expr.exprValue.expr.operands+2;
+  assert_expr_var(op3, 'D');
+
 }
 
 Test(createExpression, spaces_handling)	{
@@ -196,10 +509,60 @@ Test(createExpression, and_groups_around_xor)	{
 Test(createExpression, spaces_and_parentheses_mixed)	{
   char exprStr[] = " ( A + B ) * ( C ^ D ) ";
   Expression expr = createExpression(exprStr);
+  assert_expr_expr(&expr, ACT_AND, 2);
+
+  Expression* op1 = expr.exprValue.expr.operands;
+  cr_assert_eq(op1->parenthesized, true, "Expression op1 should be parenthesized");
+  assert_expr_expr(op1, ACT_OR, 2);
+  Expression* op3 = op1->exprValue.expr.operands;
+  Expression* op4 = op1->exprValue.expr.operands + 1;
+  assert_expr_var(op3, 'A');
+  assert_expr_var(op4, 'B');
+
+  Expression* op2 = expr.exprValue.expr.operands + 1;
+  cr_assert_eq(op2->parenthesized, true, "Expression op2 should be parenthesized");
+  assert_expr_expr(op2, ACT_XOR, 2);
+  Expression* op5 = op2->exprValue.expr.operands;
+  Expression* op6 = op2->exprValue.expr.operands + 1;
+  assert_expr_var(op5, 'C');
+  assert_expr_var(op6, 'D');
+
+	/*** Testing Eval ***/
+	bool valueMap[26] = {0,0,0,0};
+	bool result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
+
+	valueMap[0] = 1;
+	valueMap[1] = 0;
+	valueMap[2] = 1;
+	valueMap[3] = 0;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, true);
+
+	valueMap[0] = 0;
+	valueMap[1] = 1;
+	valueMap[2] = 0;
+	valueMap[3] = 1;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, true);
+
+	valueMap[0] = 1;
+	valueMap[1] = 0;
+	valueMap[2] = 1;
+	valueMap[2] = 1;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, false);
+
+	valueMap[0] = 1;
+	valueMap[1] = 1;
+	valueMap[2] = 0;
+	valueMap[3] = 1;
+	result = eval(&expr, valueMap);
+	cr_assert_eq(result, true);
 }
 
 Test(createExpression, single_variable_with_spaces)	{
-  char* exprStr = "   Z   ";
+  char exprStr[] = "   Z   ";
   Expression expr = createExpression(exprStr);
   assert_expr_var(&expr, 'Z');
 }

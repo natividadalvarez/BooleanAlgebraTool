@@ -1,8 +1,8 @@
-build: bav.c parsing.c algebra.c parsing.h algebra.h
-	cc -Wall -Wextra bav.c parsing.c algebra.c -o bav -O3
+build: main.c parsing.c algebra.c parsing.h algebra.h
+	cc -std=c99 -Wall -Wextra main.c parsing.c algebra.c -o main -O3
 
-debug: bav.c parsing.c algebra.c parsing.h algebra.h
-	cc -Wall -Wextra -Wno-unused-parameter bav.c parsing.c algebra.c -o bav -Og -g
+debug: main.c parsing.c algebra.c parsing.h algebra.h
+	cc -std=c99 -Wall -Wextra -Wno-unused-parameter main.c parsing.c algebra.c -o main -Og -g
 
 test: test.c parsing.c algebra.c parsing.h algebra.h
 	cc test.c parsing.c algebra.c -O3 \
